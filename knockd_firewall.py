@@ -5,14 +5,40 @@ import requests
 import getopt
 import time
 import json
+import smtplib, ssl
 
 APIKEY="xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 api_url = "https://api.hetzner.cloud/v1/firewalls"
 ports=['224','8080']
-serverIds=['xxxxxx','xxxxxxx']
+serverIds=['xxxxxx','xxxxxx']
 firewallName="KNOCKD"
 rules=[]
 servers=[]
+email_sender = 'xxx@xxx.com'
+email_receiver = 'xxx@xxx.com'
+email_username = 'xxxx'
+email_password = 'xxxxx'
+email_smtp = 'xxx.xxx.xxx'
+email_port = 465
+email_message = """\
+Subject: Report from update_firewall.sh
+"""
+
+def sendMail(email_message):
+    global email_sender
+    global email_receiver
+    global email_username
+    global email_password
+    global email_smtp
+    global email_port
+
+    context = ssl.create_default_context()
+    try:
+        with smtplib.SMTP_SSL(email_smtp,email_port,context=context) as server:
+            server.login(email_username,email_password)
+            server.sendmail(email_sender, email_receiver, email_message)
+    except SMTPException:
+        print ("Error: unable to send email")
 
 
 def main(argv):
@@ -23,6 +49,7 @@ def main(argv):
     global firewallName
     global rules
     global servers
+    global email_message
 
     try:
         options, args = getopt.getopt(sys.argv[1:], "a:i:",["action=", "ip="])
@@ -53,11 +80,17 @@ def main(argv):
         #First check if rules already defined
         response = requests.get(api_url+"?name="+firewallName,headers=headersObj)
         if response.status_code != 200:
-            print("Error in API request. Returncode:"+str(response.status_code))
+            msg="Error in API request. Returncode:"+str(response.status_code)
+            email_message = email_message + msg
+            sendMail(email_message)
+            print(msg)
             print(response.json())
             exit(2)
         if response.json()['meta']['pagination']['total_entries'] > 0:
-            print("Firewall rule already defined. Returncode:"+str(response.status_code))
+            msg="Firewall rule already defined. Returncode:"+str(response.status_code)
+            email_message = email_message + msg
+            sendMail(email_message)
+            print(msg)
             print(response.json())
             exit(2)
 
@@ -65,31 +98,52 @@ def main(argv):
         dataJson = json.dumps(dataObj)
         response = requests.post(api_url,data=dataJson,headers=headersObj)
         if response.status_code != 201:
-            print("Error in API request. Returncode:"+str(response.status_code))
+            msg="Error in API request. Returncode:"+str(response.status_code)
+            email_message = email_message + msg
+            sendMail(email_message)
+            print(msg)
             print(response.json())
             exit(2)
         if response.json()['actions'][0]['error'] != None:
-            print("Error in API request. Returncode:"+str(response.status_code))
+            msg="Error in API request. Returncode:"+str(response.status_code)
+            email_message = email_message + msg
+            sendMail(email_message)
+            print(msg)
             print(response.json())
             exit(2)
         for action in response.json()['actions']:
             if action['error'] != None:
-                print("Error deploying firewall:"+action['error'])
+                msg="Error deploying firewall:"+action['error']
+                email_message = email_message + msg
+                sendMail(email_message)
+                print(msg)
                 print(action)
+        msg="Firewall opened for IP: "+ip
+        email_message = email_message + msg
+        sendMail(email_message)
 
     elif action == "del":
 
         response = requests.get(api_url+"?name="+firewallName,headers=headersObj)
         if response.status_code != 200:
-            print("Error in API request. Returncode:"+str(response.status_code))
+            msg="Error in API request. Returncode:"+str(response.status_code)
+            email_message = email_message + msg
+            sendMail(email_message)
+            print(msg)
             print(response.json())
             exit(2)
         if response.json()['meta']['pagination']['total_entries'] == 0:
-            print("No firewall found. Returncode:"+str(response.status_code))
+            msg="No firewall found. Returncode:"+str(response.status_code)
+            email_message = email_message + msg
+            sendMail(email_message)
+            print(msg)
             print(response.json())
             exit(2)
         elif response.json()['meta']['pagination']['total_entries'] >1:
-            print("Multiple firewall found by name. Returncode:"+str(response.status_code))
+            msg="Multiple firewall found by name. Returncode:"+str(response.status_code)
+            email_message = email_message + msg
+            sendMail(email_message)
+            print(msg)
             print(response.json())
             exit(2)
         id = str(response.json()['firewalls'][0]['id'])
@@ -102,7 +156,10 @@ def main(argv):
         dataJson = json.dumps(dataObj)
         response = requests.post(api_url+"/"+id+"/actions/remove_from_resources",headers=headersObj,data=dataJson)
         if response.status_code != 201:
-            print("Error in API request. Returncode:"+str(response.status_code))
+            msg="Error in API request. Returncode:"+str(response.status_code)
+            email_message = email_message + msg
+            sendMail(email_message)
+            print(msg)
             print(response.json())
             exit(2)
 
@@ -110,11 +167,19 @@ def main(argv):
 
         response = requests.delete(api_url+"/"+id,headers=headersObj)
         if response.status_code != 204:
-            print("Error in API request. Returncode:"+str(response.status_code))
+            msg="Error in API request. Returncode:"+str(response.status_code)
+            email_message = email_message + msg
+            sendMail(email_message)
+            print(msg)
             print(response.json())
             exit(2)
+        email_message = email_message + "Firewall deleted for IP: "+ip
+        sendMail(email_message)
     else:
-        print("Wrong parameter supplied. Allowed only add|del")
+        msg="Wrong parameter supplied. Allowed only add|del"
+        email_message = email_message + msg
+        sendMail(email_message)
+        print(msg)
         exit(1)
 
 
